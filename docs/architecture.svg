@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 620" role="img" width="680" height="620">
+  <title>Dark factory batch data architecture</title>
+  <desc>A layered batch data pipeline showing data sources, Kafka ingestion, PostgreSQL storage, Spark processing, and ML serving, with Airflow orchestration and ELK observability spanning the stack.</desc>
+
+  <style>
+    .t  { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 14px; font-weight: 400; fill: #2C2C2A; }
+    .ts { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 12px; font-weight: 400; fill: #5F5E5A; }
+    .th { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 14px; font-weight: 500; fill: #2C2C2A; }
+    .arr  { fill: none; stroke: #5F5E5A; stroke-width: 1.5; }
+    .sectionlabel { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 12px; font-weight: 400; fill: #888780; }
+
+    .gray-fill   { fill: #F1EFE8; stroke: #5F5E5A; }
+    .gray-text   { fill: #2C2C2A; }
+    .gray-sub    { fill: #5F5E5A; }
+
+    .purple-fill { fill: #EEEDFE; stroke: #534AB7; }
+    .purple-text { fill: #3C3489; }
+    .purple-sub  { fill: #534AB7; }
+
+    .blue-fill   { fill: #E6F1FB; stroke: #185FA5; }
+    .blue-text   { fill: #0C447C; }
+    .blue-sub    { fill: #185FA5; }
+
+    .teal-fill   { fill: #E1F5EE; stroke: #0F6E56; }
+    .teal-text   { fill: #085041; }
+    .teal-sub    { fill: #0F6E56; }
+
+    .amber-fill  { fill: #FAEEDA; stroke: #854F0B; }
+    .amber-text  { fill: #633806; }
+    .amber-sub   { fill: #854F0B; }
+
+    .coral-fill  { fill: #FAECE7; stroke: #993C1D; }
+    .coral-text  { fill: #712B13; }
+    .coral-sub   { fill: #993C1D; }
+  </style>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <text class="sectionlabel" x="40" y="30">Sources</text>
+
+  <rect class="gray-fill" x="40" y="40" width="180" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th gray-text" x="130" y="64" text-anchor="middle">Logistics events</text>
+  <text class="ts gray-sub" x="130" y="82" text-anchor="middle">Smart supply chain CSV</text>
+
+  <rect class="gray-fill" x="240" y="40" width="180" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th gray-text" x="330" y="64" text-anchor="middle">HRSS telemetry</text>
+  <text class="ts gray-sub" x="330" y="82" text-anchor="middle">Sensor readings CSV</text>
+
+  <rect class="gray-fill" x="440" y="40" width="200" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th gray-text" x="540" y="64" text-anchor="middle">Python producers</text>
+  <text class="ts gray-sub" x="540" y="82" text-anchor="middle">Replay rows as events</text>
+
+  <line x1="130" y1="96" x2="500" y2="135" class="arr" marker-end="url(#arrow)"/>
+  <line x1="330" y1="96" x2="500" y2="135" class="arr" marker-end="url(#arrow)"/>
+  <line x1="540" y1="96" x2="540" y2="135" class="arr" marker-end="url(#arrow)"/>
+
+  <text class="sectionlabel" x="40" y="125">Ingestion</text>
+  <rect class="purple-fill" x="40" y="135" width="600" height="60" rx="8" stroke-width="0.5"/>
+  <text class="th purple-text" x="340" y="162" text-anchor="middle">Apache Kafka</text>
+  <text class="ts purple-sub" x="340" y="182" text-anchor="middle">Durable ingestion buffer, topics per source</text>
+
+  <line x1="340" y1="195" x2="340" y2="235" class="arr" marker-end="url(#arrow)"/>
+
+  <text class="sectionlabel" x="40" y="225">Raw storage</text>
+  <rect class="blue-fill" x="40" y="235" width="600" height="60" rx="8" stroke-width="0.5"/>
+  <text class="th blue-text" x="340" y="262" text-anchor="middle">PostgreSQL — raw schema</text>
+  <text class="ts blue-sub" x="340" y="282" text-anchor="middle">Append-only event tables, hourly flush</text>
+
+  <line x1="340" y1="295" x2="340" y2="335" class="arr" marker-end="url(#arrow)"/>
+
+  <text class="sectionlabel" x="40" y="325">Processing</text>
+  <rect class="teal-fill" x="40" y="335" width="600" height="60" rx="8" stroke-width="0.5"/>
+  <text class="th teal-text" x="340" y="362" text-anchor="middle">Apache Spark</text>
+  <text class="ts teal-sub" x="340" y="382" text-anchor="middle">Quarterly batch job, aggregates and engineers features</text>
+
+  <line x1="340" y1="395" x2="340" y2="435" class="arr" marker-end="url(#arrow)"/>
+
+  <text class="sectionlabel" x="40" y="425">Serving</text>
+  <rect class="blue-fill" x="40" y="435" width="600" height="60" rx="8" stroke-width="0.5"/>
+  <text class="th blue-text" x="340" y="462" text-anchor="middle">PostgreSQL — analytics schema</text>
+  <text class="ts blue-sub" x="340" y="482" text-anchor="middle">ML-ready feature tables queried by frontend</text>
+
+  <text class="sectionlabel" x="40" y="525">Cross-cutting</text>
+  <rect class="amber-fill" x="40" y="535" width="290" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th amber-text" x="185" y="559" text-anchor="middle">Apache Airflow</text>
+  <text class="ts amber-sub" x="185" y="577" text-anchor="middle">Orchestrates ingest and processing</text>
+
+  <rect class="coral-fill" x="350" y="535" width="290" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th coral-text" x="495" y="559" text-anchor="middle">ELK stack</text>
+  <text class="ts coral-sub" x="495" y="577" text-anchor="middle">Centralised logs, Kibana dashboards</text>
+</svg>
