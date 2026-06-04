@@ -1,46 +1,125 @@
 """Dark Factory pipeline DAG.
 
-Schedules the two recurring jobs in the platform:
-  1. Hourly flush from Kafka topics to the raw.* schema in Postgres
-  2. Quarterly Spark batch job that reads raw.* and writes analytics.*
+End-to-end orchestration of the batch pipeline:
 
-In demo mode (DEMO_MODE=true), schedules are compressed so an end-to-end
-cycle completes in minutes instead of months.
+    ┌─ ingest_logistics ─┐
+    │                    ├──► spark_quarterly_aggregation
+    └─ ingest_hrss ──────┘
 
-TODO (Phase 2):
-  - Implement the kafka_to_postgres task (likely a PythonOperator that
-    consumes from Kafka and bulk-inserts into raw.*)
-  - Implement the spark_aggregation task (SparkSubmitOperator pointing at
-    spark/jobs/quarterly_aggregation.py)
-  - Wire up sensors so the spark job waits for raw data to be present
-  - Add task-level retries and alerting
+The two ingest tasks drain their Kafka topics into the raw.* tables in
+parallel (no dependency between them). The Spark task aggregates the raw
+data into analytics.* once both ingests have finished.
+
+Schedule
+--------
+Production cadence per docs/01-conception.md §6 is hourly ingest + quarterly
+Spark, which would naturally split into two DAGs (and is a documented
+production extension). For the portfolio demo we keep one DAG that runs
+all three tasks together, controlled by `DEMO_MODE`:
+
+  DEMO_MODE=true   → schedule = every DEMO_INGEST_INTERVAL_MINUTES minutes
+  DEMO_MODE=false  → schedule = None (manual trigger via `make demo`)
+
+Sharp edge
+----------
+SparkSubmitOperator runs `spark-submit` from inside the Airflow container
+in client mode (the driver lives here; the executors live on spark-worker).
+Both Java and pyspark are baked into airflow/Dockerfile so this works.
+The Postgres JDBC driver is pulled at submit time via --packages.
 """
 
+from __future__ import annotations
+
+import os
 from datetime import datetime, timedelta
 
 from airflow import DAG
-from airflow.operators.empty import EmptyOperator
+from airflow.operators.python import PythonOperator
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 
-default_args = {
+# /opt/airflow/dags is on sys.path inside the container, so `lib.X` resolves
+# to airflow/dags/lib/X.py on the host.
+from lib.kafka_to_postgres import ingest_hrss, ingest_logistics
+
+
+# ---------------------------------------------------------------------------
+# Schedule (demo-mode aware)
+# ---------------------------------------------------------------------------
+
+DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() == "true"
+DEMO_INGEST_INTERVAL_MIN = int(os.environ.get("DEMO_INGEST_INTERVAL_MINUTES", "5"))
+
+# In production the conception doc specifies hourly ingest + quarterly Spark,
+# which would split into two DAGs. The single-DAG demo cadence is fine for
+# the portfolio walk-through; documented as a production extension in §5.
+SCHEDULE = timedelta(minutes=DEMO_INGEST_INTERVAL_MIN) if DEMO_MODE else None
+
+
+# ---------------------------------------------------------------------------
+# Operator config
+# ---------------------------------------------------------------------------
+
+DEFAULT_ARGS = {
     "owner": "data-engineering",
     "depends_on_past": False,
     "retries": 2,
-    "retry_delay": timedelta(minutes=5),
+    "retry_delay": timedelta(minutes=1),
 }
+
+# Postgres env passed through to the Spark driver. spark-submit forks a new
+# process so it doesn't inherit Airflow's env by default — we hand it
+# explicitly so quarterly_aggregation.py can reach Postgres.
+SPARK_ENV = {
+    "POSTGRES_HOST":     os.environ.get("POSTGRES_HOST", "postgres"),
+    "POSTGRES_PORT":     os.environ.get("POSTGRES_PORT", "5432"),
+    "POSTGRES_DB":       os.environ.get("POSTGRES_DB", "darkfactory"),
+    "POSTGRES_USER":     os.environ.get("POSTGRES_USER", "darkfactory"),
+    "POSTGRES_PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+}
+
+
+# ---------------------------------------------------------------------------
+# DAG
+# ---------------------------------------------------------------------------
 
 with DAG(
     dag_id="dark_factory_pipeline",
-    default_args=default_args,
-    description="End-to-end batch pipeline for the dark factory data platform",
-    schedule="@hourly",          # Will be parameterised via DEMO_MODE in Phase 2
-    start_date=datetime(2026, 1, 1),
+    description="End-to-end batch pipeline: Kafka → raw.* → Spark → analytics.*",
+    default_args=DEFAULT_ARGS,
+    schedule=SCHEDULE,
+    start_date=datetime(2025, 1, 1),
     catchup=False,
-    tags=["dark-factory", "batch"],
+    max_active_runs=1,
+    tags=["dark-factory", "phase-2"],
 ) as dag:
 
-    # TODO: replace EmptyOperators with real implementations
-    ingest = EmptyOperator(task_id="kafka_to_postgres")
-    process = EmptyOperator(task_id="spark_aggregation")
-    notify = EmptyOperator(task_id="notify_downstream")
+    ingest_logistics_task = PythonOperator(
+        task_id="ingest_logistics",
+        python_callable=ingest_logistics,
+        doc_md="Drain Kafka `logistics_events` → `raw.logistics_events`.",
+    )
 
-    ingest >> process >> notify
+    ingest_hrss_task = PythonOperator(
+        task_id="ingest_hrss",
+        python_callable=ingest_hrss,
+        doc_md="Drain Kafka `hrss_telemetry` → `raw.hrss_telemetry`.",
+    )
+
+    spark_aggregate = SparkSubmitOperator(
+        task_id="spark_quarterly_aggregation",
+        # Path inside the airflow container (mounted from ./spark/jobs).
+        application="/opt/spark/jobs/quarterly_aggregation.py",
+        # Connection set via AIRFLOW_CONN_SPARK_DEFAULT in docker-compose.yml.
+        conn_id="spark_default",
+        # Postgres JDBC driver — downloaded by spark-submit on first run.
+        packages="org.postgresql:postgresql:42.7.3",
+        env_vars=SPARK_ENV,
+        verbose=False,
+        doc_md=(
+            "PySpark job: read the latest quarter from raw.*, compute "
+            "per-asset and per-class aggregates, write to analytics.*. "
+            "Idempotent (DELETE quarter then INSERT)."
+        ),
+    )
+
+    [ingest_logistics_task, ingest_hrss_task] >> spark_aggregate

@@ -28,10 +28,17 @@ x-airflow-common: &airflow-common
     KAFKA_TOPIC_LOGISTICS: ${KAFKA_TOPIC_LOGISTICS}
     KAFKA_TOPIC_HRSS: ${KAFKA_TOPIC_HRSS}
     POSTGRES_HOST: postgres
+    POSTGRES_PORT: "5432"
     POSTGRES_DB: ${POSTGRES_DB}
     POSTGRES_USER: ${POSTGRES_USER}
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     SPARK_MASTER_URL: ${SPARK_MASTER_URL}
+    # Airflow Spark connection — picked up by SparkSubmitOperator(conn_id="spark_default").
+    # Format: spark://<host>:<port>. No auth on our single-node cluster.
+    AIRFLOW_CONN_SPARK_DEFAULT: "spark://spark-master:7077"
+    # Demo-mode knobs read by airflow/dags/dark_factory_pipeline.py
+    DEMO_MODE: ${DEMO_MODE:-false}
+    DEMO_INGEST_INTERVAL_MINUTES: ${DEMO_INGEST_INTERVAL_MINUTES:-5}
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./spark/jobs:/opt/spark/jobs:ro
