@@ -1,0 +1,2 @@
+{"attributes":{"fieldFormatMap":"{}","name":"Dark Factory Logs","runtimeFieldMap":"{}","sourceFilters":"[]","timeFieldName":"@timestamp","title":"darkfactory-logs-*"},"coreMigrationVersion":"8.13.4","id":"dark-factory-logs","managed":false,"references":[],"type":"index-pattern","typeMigrationVersion":"8.0.0"}
+{"exportedCount":1,"missingRefCount":0,"missingReferences":[]}

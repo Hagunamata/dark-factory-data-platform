@@ -11,6 +11,19 @@
 # dependencies ensure services come up in the right order.
 # ==============================================================================
 
+# Reusable GELF logging config — services that mix this in ship their
+# stdout/stderr to Logstash on UDP 12201. `mode: non-blocking` means a
+# Logstash restart can't deadlock a producing container; logs may drop
+# in that window, which is acceptable for a dev stack.
+# We can't anchor `logging:` directly inside another anchor (compose merge
+# is per-key), so per-service blocks reference these env-var defaults.
+x-gelf-logging: &gelf-logging
+  driver: gelf
+  options:
+    gelf-address: "udp://localhost:12201"
+    mode: "non-blocking"
+    max-buffer-size: "4m"
+
 x-airflow-common: &airflow-common
   build:
     context: .
@@ -132,6 +145,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    logging: *gelf-logging
 
   spark-worker:
     image: bitnami/spark:3.5.3
@@ -153,6 +167,7 @@ services:
         condition: service_healthy
     networks:
       - darkfactory
+    logging: *gelf-logging
 
   # ----------------------------------------------------------------------------
   # Orchestration: Apache Airflow (LocalExecutor)
@@ -195,6 +210,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    logging: *gelf-logging
 
   airflow-scheduler:
     <<: *airflow-common
@@ -206,6 +222,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
     restart: unless-stopped
+    logging: *gelf-logging
 
   # ----------------------------------------------------------------------------
   # Observability: ELK stack
@@ -237,10 +254,16 @@ services:
     container_name: logstash
     restart: unless-stopped
     ports:
-      - "5044:5044"   # beats input (Phase 2: filebeat)
-      - "5000:5000"   # tcp input fallback
+      # GELF input — receives container stdout/stderr forwarded by the
+      # Docker daemon's gelf log driver (see x-gelf-logging anchor above).
+      - "12201:12201/udp"
     volumes:
       - ./elk/logstash/pipeline.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    environment:
+      # Single-pipeline dev cluster — disable X-Pack monitoring to avoid
+      # noisy security-warning logs against an open-auth Elasticsearch.
+      XPACK_MONITORING_ENABLED: "false"
+      LS_JAVA_OPTS: "-Xms512m -Xmx512m"
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -288,6 +311,7 @@ services:
         condition: service_healthy
     networks:
       - darkfactory
+    logging: *gelf-logging
 
 # ==============================================================================
 # Networks and volumes
