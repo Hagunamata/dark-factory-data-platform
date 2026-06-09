@@ -164,10 +164,6 @@ services:
       - ./spark/jobs:/opt/jobs:ro
     depends_on:
       spark-master:
-        # NOTE: was `service_healthy`, but the spark-master healthcheck was
-        # disabled when migrating to bitnamilegacy/spark — the legacy image's
-        # default container shape doesn't expose curl, so the healthcheck
-        # would always fail. Worker waits for master container start instead.
         condition: service_started
     networks:
       - darkfactory
