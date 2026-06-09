@@ -65,7 +65,7 @@ services:
   # Ingestion: Apache Kafka (KRaft mode, single combined broker+controller)
   # ----------------------------------------------------------------------------
   kafka:
-    image: bitnami/kafka:3.7.1
+    image: bitnamilegacy/kafka:3.6.1-debian-12-r12
     container_name: kafka
     restart: unless-stopped
     ports:
@@ -84,7 +84,7 @@ services:
       KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
       ALLOW_PLAINTEXT_LISTENER: "yes"
     volumes:
-      - kafka_data:/bitnami/kafka
+      - kafka_data:/bitnamilegacy/kafka
     networks:
       - darkfactory
     healthcheck:
@@ -123,7 +123,7 @@ services:
   # Processing: Apache Spark (single-node master + one worker)
   # ----------------------------------------------------------------------------
   spark-master:
-    image: bitnami/spark:3.5.3
+    image: bitnamilegacy/spark:3.5.3
     container_name: spark-master
     restart: unless-stopped
     ports:
@@ -139,16 +139,10 @@ services:
       - ./spark/jobs:/opt/jobs:ro
     networks:
       - darkfactory
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ >/dev/null || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
     logging: *gelf-logging
 
   spark-worker:
-    image: bitnami/spark:3.5.3
+    image: bitnamilegacy/spark:3.5.3
     container_name: spark-worker
     restart: unless-stopped
     environment:
@@ -163,8 +157,7 @@ services:
     volumes:
       - ./spark/jobs:/opt/jobs:ro
     depends_on:
-      spark-master:
-        condition: service_healthy
+       - spark-master
     networks:
       - darkfactory
     logging: *gelf-logging
