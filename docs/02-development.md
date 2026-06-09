@@ -175,7 +175,29 @@ These are the implementation lessons the conception doc anticipated in §9, plus
 
 **Resolution in `docs/verification.md`:** explicitly call out the offset-reset command if the user wants to re-ingest the same messages.
 
-### 4.6 Native `make` doesn't work on Windows by default
+### 4.6 Bitnami container images moved to `bitnamilegacy/*`
+
+**Surfaced during:** initial `docker compose up -d` — Kafka and Spark images failed to pull / report healthy on first attempt.
+
+**Background:** in mid-2025 Broadcom (which acquired Bitnami's parent) moved the freely-available Bitnami images from `bitnami/*` to `bitnamilegacy/*` on Docker Hub and stopped publishing new tags to the original namespace.
+
+**Resolution:** image references were updated to:
+- `bitnami/kafka:3.7.1` → `bitnamilegacy/kafka:3.6.1-debian-12-r12`
+- `bitnami/spark:3.5.3` → `bitnamilegacy/spark:3.5.3`
+
+The `spark-master` healthcheck was also disabled (curl isn't on the legacy image's PATH), so the `spark-worker` `depends_on` condition was relaxed from `service_healthy` to `service_started`. The Spark cluster still comes up correctly — verification is now visual (worker appears in the master UI at http://localhost:8081).
+
+**Long-term risk:** the `bitnamilegacy` namespace is itself flagged as temporary. The robust production replacement is to use the upstream Apache images directly (`apache/kafka:3.7`, `apache/spark:3.5.3`), at the cost of re-doing the env-var configuration that Bitnami's wrapper provides. Phase 3 reflection should note this if image stability matters to the assessor.
+
+### 4.7 Manual Python imports require explicit `PYTHONPATH`
+
+**Surfaced during:** Step 3 of `docs/verification.md` (running the ingestion module by hand outside the DAG).
+
+**Behaviour:** `from lib.kafka_to_postgres import ingest_logistics` works inside DAG code because Airflow inserts `/opt/airflow/dags` on `sys.path` at DAG-parse time. A plain `python -c "..."` invocation doesn't get that benefit and fails with `ModuleNotFoundError: No module named 'lib'`.
+
+**Resolution:** the verification doc now uses `docker compose exec -e PYTHONPATH=/opt/airflow/dags ...` for ad-hoc tests. The DAG itself is unaffected.
+
+### 4.8 Native `make` doesn't work on Windows by default
 
 **Surfaced during:** initial environment bring-up.
 

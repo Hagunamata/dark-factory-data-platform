@@ -176,7 +176,7 @@ The consumer module lives in the Airflow container. You can test it in isolation
 ### Run the logistics consumer directly
 
 ```bash
-docker compose exec airflow-scheduler python -c "from lib.kafka_to_postgres import ingest_logistics; ingest_logistics()"
+docker compose exec -e PYTHONPATH=/opt/airflow/dags airflow-scheduler python -c "from lib.kafka_to_postgres import ingest_logistics; ingest_logistics()"
 ```
 
 Takes **~30–90 seconds** for 600k rows.
@@ -214,7 +214,7 @@ docker compose exec postgres psql -U darkfactory -d darkfactory \
 ### Run the HRSS consumer
 
 ```bash
-docker compose exec airflow-scheduler python -c "from lib.kafka_to_postgres import ingest_hrss; ingest_hrss()"
+docker compose exec -e PYTHONPATH=/opt/airflow/dags airflow-scheduler python -c "from lib.kafka_to_postgres import ingest_hrss; ingest_hrss()"
 ```
 
 **Expected:** `Consumer finished: 400000 rows inserted into raw.hrss_telemetry`.
@@ -231,7 +231,7 @@ docker compose exec postgres psql -U darkfactory -d darkfactory \
 Re-run the consumer:
 
 ```bash
-docker compose exec airflow-scheduler python -c "from lib.kafka_to_postgres import ingest_logistics; ingest_logistics()"
+docker compose exec -e PYTHONPATH=/opt/airflow/dags airflow-scheduler python -c "from lib.kafka_to_postgres import ingest_logistics; ingest_logistics()"
 ```
 
 **Expected:** consumer immediately reports 3 empty polls and exits with `0 rows inserted`. This is the manual-offset-commit behaviour: messages already consumed by this group are not re-delivered.
