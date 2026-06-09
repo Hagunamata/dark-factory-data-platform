@@ -157,7 +157,8 @@ services:
     volumes:
       - ./spark/jobs:/opt/jobs:ro
     depends_on:
-       - spark-master
+      spark-master:
+        condition: service_started
     networks:
       - darkfactory
     logging: *gelf-logging
