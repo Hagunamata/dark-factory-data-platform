@@ -255,12 +255,13 @@ Pick any quarter with a non-trivial count, e.g. `2025-07-01`.
 ```bash
 docker compose exec airflow-scheduler spark-submit \
     --master spark://spark-master:7077 \
-    --packages org.postgresql:postgresql:42.7.3 \
+    --jars /opt/spark/extra-jars/postgresql-42.7.3.jar \
     /opt/spark/jobs/quarterly_aggregation.py \
     --quarter-start 2025-07-01
 ```
 
-First run downloads the Postgres JDBC JAR from Maven (~30 s extra). Subsequent runs are cached.
+The Postgres JDBC driver is baked into the Airflow image at build time
+(see `airflow/Dockerfile`), so no Maven download happens at submit time.
 
 ### Expected output (excerpts)
 

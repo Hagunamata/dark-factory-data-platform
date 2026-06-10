@@ -19,6 +19,15 @@ RUN apt-get update \
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
+# Postgres JDBC driver — baked into the image so SparkSubmitOperator does
+# NOT need Maven Central reachable from the running container. The DAG
+# passes this path via `jars=` instead of `packages=`. Catches corp-proxy
+# environments where Ivy's runtime download fails with DNS errors.
+RUN mkdir -p /opt/spark/extra-jars && \
+    curl -fsSL -o /opt/spark/extra-jars/postgresql-42.7.3.jar \
+        https://jdbc.postgresql.org/download/postgresql-42.7.3.jar && \
+    chmod 644 /opt/spark/extra-jars/postgresql-42.7.3.jar
+
 USER airflow
 
 # pyspark gives us spark-submit + the JARs; the providers wire it into Airflow.

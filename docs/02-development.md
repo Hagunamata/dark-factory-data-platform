@@ -161,11 +161,13 @@ These are the implementation lessons the conception doc anticipated in §9, plus
 
 **Resolution:** `postgres/init/00_create_databases.sql` creates a dedicated `airflow` database that runs **before** `01_schemas.sql` (alphabetical order in `/docker-entrypoint-initdb.d`). Airflow's metadata is fully isolated from `raw` / `analytics`.
 
-### 4.4 First Spark submit downloads the JDBC JAR
+### 4.4 Postgres JDBC JAR baked into the Airflow image
 
-**Behaviour:** the very first `SparkSubmitOperator` run pulls `org.postgresql:postgresql:42.7.3` from Maven (~30 seconds, ~1 MB). Subsequent runs hit the Ivy cache and start in seconds.
+**Initial implementation:** the DAG used `packages="org.postgresql:postgresql:42.7.3"` so spark-submit would resolve the dependency via Ivy/Maven on first run. Clean, no image rebuild needed.
 
-**Why this is the right trade-off:** baking the JAR into the Spark image would couple our image rebuild to a transitive dependency. `--packages` keeps the dependency declaration in the submit command, where it belongs.
+**Why it changed:** at the first end-to-end test, the Ivy resolver inside the Airflow container failed with `Host repo1.maven.org not found`. The container could pull Docker images during build but could not reach Maven Central at runtime — a typical corporate-proxy / split-DNS environment.
+
+**Resolution:** the JAR is now downloaded once during `docker build` of the custom Airflow image and placed at `/opt/spark/extra-jars/postgresql-42.7.3.jar`. The DAG passes that path via `jars=` instead of `packages=`. Side benefits: the image now works fully offline; no per-submit network call; the JAR version is captured in `airflow/Dockerfile`, where it belongs.
 
 ### 4.5 Kafka consumer groups remember their offsets across runs
 
