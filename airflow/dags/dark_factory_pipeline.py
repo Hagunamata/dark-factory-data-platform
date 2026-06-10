@@ -111,8 +111,10 @@ with DAG(
         application="/opt/spark/jobs/quarterly_aggregation.py",
         # Connection set via AIRFLOW_CONN_SPARK_DEFAULT in docker-compose.yml.
         conn_id="spark_default",
-        # Postgres JDBC driver — downloaded by spark-submit on first run.
-        packages="org.postgresql:postgresql:42.7.3",
+        # Postgres JDBC driver — baked into airflow/Dockerfile so submit-time
+        # Maven downloads are not required (avoids breakage in offline /
+        # corporate-proxy environments).
+        jars="/opt/spark/extra-jars/postgresql-42.7.3.jar",
         env_vars=SPARK_ENV,
         verbose=False,
         doc_md=(
