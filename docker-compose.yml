@@ -55,6 +55,10 @@ x-airflow-common: &airflow-common
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./spark/jobs:/opt/spark/jobs:ro
+    # JDBC drivers and any other extra JARs spark-submit needs. Populated
+    # by the host (see airflow/jars/README.md), NOT pulled at runtime —
+    # works in offline / corporate-proxy environments.
+    - ./airflow/jars:/opt/spark/extra-jars:ro
     - airflow_logs:/opt/airflow/logs
   networks:
     - darkfactory

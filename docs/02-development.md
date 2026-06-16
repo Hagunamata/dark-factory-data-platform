@@ -161,13 +161,19 @@ These are the implementation lessons the conception doc anticipated in §9, plus
 
 **Resolution:** `postgres/init/00_create_databases.sql` creates a dedicated `airflow` database that runs **before** `01_schemas.sql` (alphabetical order in `/docker-entrypoint-initdb.d`). Airflow's metadata is fully isolated from `raw` / `analytics`.
 
-### 4.4 Postgres JDBC JAR baked into the Airflow image
+### 4.4 Postgres JDBC JAR bind-mounted from the host
 
-**Initial implementation:** the DAG used `packages="org.postgresql:postgresql:42.7.3"` so spark-submit would resolve the dependency via Ivy/Maven on first run. Clean, no image rebuild needed.
+**Attempt 1 — `--packages`:** the DAG initially used `packages="org.postgresql:postgresql:42.7.3"` so spark-submit would resolve the dependency via Ivy/Maven on first run. Clean, no image rebuild needed.
 
-**Why it changed:** at the first end-to-end test, the Ivy resolver inside the Airflow container failed with `Host repo1.maven.org not found`. The container could pull Docker images during build but could not reach Maven Central at runtime — a typical corporate-proxy / split-DNS environment.
+**Failed because:** at the first end-to-end test, the Ivy resolver inside the Airflow container failed with `Host repo1.maven.org not found`. The container could pull Docker images during build but could not reach Maven Central at runtime — a typical corporate-proxy / split-DNS environment.
 
-**Resolution:** the JAR is now downloaded once during `docker build` of the custom Airflow image and placed at `/opt/spark/extra-jars/postgresql-42.7.3.jar`. The DAG passes that path via `jars=` instead of `packages=`. Side benefits: the image now works fully offline; no per-submit network call; the JAR version is captured in `airflow/Dockerfile`, where it belongs.
+**Attempt 2 — bake the JAR into the image via `RUN curl`:** moved the dependency resolution to build time, where Internet access seemed available. The DAG switched to `jars=` pointing at the in-image path.
+
+**Failed because:** even after rebuilding, spark-submit reported `Local jar /opt/spark/extra-jars/postgresql-42.7.3.jar does not exist, skipping`. The build had either used a stale cached layer or curl had reached a different host than expected (jdbc.postgresql.org isn't always granted by the same proxy rules as Docker Hub).
+
+**Final resolution — bind-mount from the host:** the developer downloads the JAR once on their host (where browser/VPN credentials work), drops it into `./airflow/jars/`, and Compose mounts it read-only at `/opt/spark/extra-jars/` in the Airflow container. The DAG keeps `jars="/opt/spark/extra-jars/postgresql-42.7.3.jar"`. The container never needs network access for the driver, and the file is version-controlled alongside the code (or .gitignored — developer's choice, documented in `airflow/jars/README.md`).
+
+This is the right answer for any environment where image build-time and runtime have different network reachability. The conception doc's discipline note applies: *"Be honest in commits and PRs. Tried X, didn't work, fell back to Y because Z."*
 
 ### 4.5 Kafka consumer groups remember their offsets across runs
 
