@@ -113,6 +113,7 @@ def previous_quarter_start(reference: Optional[datetime] = None) -> date:
 def build_spark() -> SparkSession:
     return (
         SparkSession.builder
+        .master("spark://spark-master:7077")
         .appName("dark-factory-quarterly-aggregation")
         # Single-node scope (conception doc §4.3): keep shuffle parallelism low.
         .config("spark.sql.shuffle.partitions", "4")
