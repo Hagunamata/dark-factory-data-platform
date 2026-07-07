@@ -1,15 +1,9 @@
-# ==============================================================================
 # Dark Factory Data Platform — docker-compose.yml
-# ==============================================================================
-# One-command bring-up of the full batch pipeline stack described in
-# docs/01-conception.md §3:
 #
-#   Sources → Kafka → Postgres (raw) → Spark → Postgres (analytics)
-#                  Airflow (orchestration), ELK (logs)
+# Sources → Kafka → Postgres (raw) → Spark → Postgres (analytics)
+#                Airflow (orchestration), ELK (logs)
 #
-# Image versions are pinned so the stack is reproducible. Health-aware
-# dependencies ensure services come up in the right order.
-# ==============================================================================
+# All image versions pinned. depends_on uses healthchecks where available.
 
 # Reusable GELF logging config — services that mix this in ship their
 # stdout/stderr to Logstash on UDP 12201. `mode: non-blocking` means a

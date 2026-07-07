@@ -1,33 +1,18 @@
 """Quarterly batch aggregation: raw.* → analytics.* (PySpark).
 
-This is the quarterly job referenced in docs/01-conception.md §6:
-the ML application re-trains once per quarter and reads only from
-`analytics.*`; this job is what makes those tables fresh.
+Reads one quarter of `raw.logistics_events` and `raw.hrss_telemetry`,
+computes per-asset and per-class aggregates, writes to
+`analytics.logistics_features_quarterly` and `analytics.hrss_features_quarterly`.
 
-Inputs
-------
-  raw.logistics_events         (one quarter slice)
-  raw.hrss_telemetry           (one quarter slice)
+Idempotent: DELETEs any existing rows for the target quarter before
+writing, so re-running produces the same end state. The DELETE runs on
+the driver via psycopg2; the writes go through Spark JDBC.
 
-Outputs
--------
-  analytics.logistics_features_quarterly   (one row per (quarter, asset_id))
-  analytics.hrss_features_quarterly        (one row per (quarter, is_anomalous, is_optimised))
+Ad-hoc submission:
 
-Idempotency
------------
-The job DELETEs any existing rows for the target quarter before writing,
-so re-running for the same quarter produces the same end state. The DELETE
-runs on the Spark driver via psycopg2 (the driver process lives inside the
-Airflow container, which has psycopg2 from airflow/Dockerfile).
-
-Submission
-----------
-Invoked by Airflow's SparkSubmitOperator (Phase 2 step 5). For ad-hoc runs:
-
-  docker compose exec airflow-webserver spark-submit \\
+  docker compose exec airflow-scheduler spark-submit \\
       --master spark://spark-master:7077 \\
-      --packages org.postgresql:postgresql:42.7.3 \\
+      --jars /opt/spark/extra-jars/postgresql-42.7.3.jar \\
       /opt/spark/jobs/quarterly_aggregation.py \\
       --quarter-start 2025-01-01
 """
@@ -115,7 +100,7 @@ def build_spark() -> SparkSession:
         SparkSession.builder
         .master("spark://spark-master:7077")
         .appName("dark-factory-quarterly-aggregation")
-        # Single-node scope (conception doc §4.3): keep shuffle parallelism low.
+        # Single-node scope: keep shuffle parallelism low.
         .config("spark.sql.shuffle.partitions", "4")
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
@@ -135,8 +120,7 @@ def _jdbc_read_quarter(
 ) -> DataFrame:
     # Use `query` (not `dbtable`) so the WHERE clause runs on Postgres and
     # only the quarter slice ever reaches Spark. For ~166k rows per quarter
-    # on a 2-core worker, a single partition is pragmatic — see
-    # conception doc §4.3 ("demonstrates scalability pattern, not absolute scale").
+    # on a 2-core worker a single partition is fine.
     sql = (
         f"SELECT * FROM {table} "
         f"WHERE {timestamp_col} >= '{quarter_start.isoformat()}' "
