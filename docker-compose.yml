@@ -1,15 +1,9 @@
-# ==============================================================================
 # Dark Factory Data Platform — docker-compose.yml
-# ==============================================================================
-# One-command bring-up of the full batch pipeline stack described in
-# docs/01-conception.md §3:
 #
-#   Sources → Kafka → Postgres (raw) → Spark → Postgres (analytics)
-#                  Airflow (orchestration), ELK (logs)
+# Sources → Kafka → Postgres (raw) → Spark → Postgres (analytics)
+#                Airflow (orchestration), ELK (logs)
 #
-# Image versions are pinned so the stack is reproducible. Health-aware
-# dependencies ensure services come up in the right order.
-# ==============================================================================
+# All image versions pinned. depends_on uses healthchecks where available.
 
 # Reusable GELF logging config — services that mix this in ship their
 # stdout/stderr to Logstash on UDP 12201. `mode: non-blocking` means a
@@ -55,6 +49,10 @@ x-airflow-common: &airflow-common
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./spark/jobs:/opt/spark/jobs:ro
+    # JDBC drivers and any other extra JARs spark-submit needs. Populated
+    # by the host (see airflow/jars/README.md), NOT pulled at runtime —
+    # works in offline / corporate-proxy environments.
+    - ./airflow/jars:/opt/spark/extra-jars:ro
     - airflow_logs:/opt/airflow/logs
   networks:
     - darkfactory
@@ -65,7 +63,7 @@ services:
   # Ingestion: Apache Kafka (KRaft mode, single combined broker+controller)
   # ----------------------------------------------------------------------------
   kafka:
-    image: bitnami/kafka:3.7.1
+    image: bitnamilegacy/kafka:3.6.1-debian-12-r12
     container_name: kafka
     restart: unless-stopped
     ports:
@@ -84,7 +82,7 @@ services:
       KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
       ALLOW_PLAINTEXT_LISTENER: "yes"
     volumes:
-      - kafka_data:/bitnami/kafka
+      - kafka_data:/bitnamilegacy/kafka
     networks:
       - darkfactory
     healthcheck:
@@ -123,7 +121,7 @@ services:
   # Processing: Apache Spark (single-node master + one worker)
   # ----------------------------------------------------------------------------
   spark-master:
-    image: bitnami/spark:3.5.3
+    image: bitnamilegacy/spark:3.5.3
     container_name: spark-master
     restart: unless-stopped
     ports:
@@ -139,16 +137,10 @@ services:
       - ./spark/jobs:/opt/jobs:ro
     networks:
       - darkfactory
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ >/dev/null || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
     logging: *gelf-logging
 
   spark-worker:
-    image: bitnami/spark:3.5.3
+    image: bitnamilegacy/spark:3.5.3
     container_name: spark-worker
     restart: unless-stopped
     environment:
@@ -164,7 +156,7 @@ services:
       - ./spark/jobs:/opt/jobs:ro
     depends_on:
       spark-master:
-        condition: service_healthy
+        condition: service_started
     networks:
       - darkfactory
     logging: *gelf-logging

@@ -1,27 +1,18 @@
 """Kafka → Postgres bulk consumer.
 
-Drains a Kafka topic into a `raw.*` Postgres table. Designed to be invoked
-by an Airflow PythonOperator on an hourly schedule (per docs/01-conception.md
-§6: "Raw ingestion (Kafka → Postgres) — Hourly").
+Drains a Kafka topic into a raw.* Postgres table. Called by the DAG's
+PythonOperator tasks.
 
-Reliability model
------------------
-- Kafka offsets are committed **manually** and **only after** the Postgres
-  insert for a batch succeeds. If the task crashes mid-batch, the
-  uncommitted messages are re-delivered on the next run. This makes the
-  ingestion at-least-once (with possible duplicates if Postgres committed
-  before Kafka did) — acceptable for an append-only `raw` layer.
-- Bulk inserts use psycopg2.extras.execute_values for ~100× throughput
-  over per-row INSERTs.
-- The function stops after `max_idle_polls` consecutive empty polls so the
-  Airflow task terminates cleanly when the topic has been fully drained.
+Delivery: Kafka offsets are committed manually after the Postgres insert
+succeeds, so a mid-batch crash re-delivers the uncommitted messages.
+At-least-once, acceptable for the append-only raw layer.
 
-Configuration
--------------
-All connection parameters can be passed explicitly, or are read from the
-environment (see .env.example):
-  KAFKA_BOOTSTRAP_SERVERS
-  POSTGRES_HOST / POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD
+Bulk inserts use psycopg2.extras.execute_values. The consumer stops after
+`max_idle_polls` consecutive empty polls so the task terminates cleanly
+once the topic has drained.
+
+Connection parameters can be passed explicitly or default to environment
+variables (see .env.example).
 """
 
 from __future__ import annotations

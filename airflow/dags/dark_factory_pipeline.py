@@ -1,31 +1,14 @@
 """Dark Factory pipeline DAG.
 
-End-to-end orchestration of the batch pipeline:
-
     ┌─ ingest_logistics ─┐
     │                    ├──► spark_quarterly_aggregation
     └─ ingest_hrss ──────┘
 
-The two ingest tasks drain their Kafka topics into the raw.* tables in
-parallel (no dependency between them). The Spark task aggregates the raw
-data into analytics.* once both ingests have finished.
+Both ingest tasks drain their Kafka topics into raw.* in parallel; the
+Spark task aggregates the raw data into analytics.* once both finish.
 
-Schedule
---------
-Production cadence per docs/01-conception.md §6 is hourly ingest + quarterly
-Spark, which would naturally split into two DAGs (and is a documented
-production extension). For the portfolio demo we keep one DAG that runs
-all three tasks together, controlled by `DEMO_MODE`:
-
-  DEMO_MODE=true   → schedule = every DEMO_INGEST_INTERVAL_MINUTES minutes
-  DEMO_MODE=false  → schedule = None (manual trigger via `make demo`)
-
-Sharp edge
-----------
-SparkSubmitOperator runs `spark-submit` from inside the Airflow container
-in client mode (the driver lives here; the executors live on spark-worker).
-Both Java and pyspark are baked into airflow/Dockerfile so this works.
-The Postgres JDBC driver is pulled at submit time via --packages.
+Schedule: when DEMO_MODE=true, runs every DEMO_INGEST_INTERVAL_MINUTES
+minutes; otherwise the DAG has no schedule and is triggered manually.
 """
 
 from __future__ import annotations
@@ -49,9 +32,6 @@ from lib.kafka_to_postgres import ingest_hrss, ingest_logistics
 DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() == "true"
 DEMO_INGEST_INTERVAL_MIN = int(os.environ.get("DEMO_INGEST_INTERVAL_MINUTES", "5"))
 
-# In production the conception doc specifies hourly ingest + quarterly Spark,
-# which would split into two DAGs. The single-DAG demo cadence is fine for
-# the portfolio walk-through; documented as a production extension in §5.
 SCHEDULE = timedelta(minutes=DEMO_INGEST_INTERVAL_MIN) if DEMO_MODE else None
 
 
@@ -111,8 +91,10 @@ with DAG(
         application="/opt/spark/jobs/quarterly_aggregation.py",
         # Connection set via AIRFLOW_CONN_SPARK_DEFAULT in docker-compose.yml.
         conn_id="spark_default",
-        # Postgres JDBC driver — downloaded by spark-submit on first run.
-        packages="org.postgresql:postgresql:42.7.3",
+        # Postgres JDBC driver — baked into airflow/Dockerfile so submit-time
+        # Maven downloads are not required (avoids breakage in offline /
+        # corporate-proxy environments).
+        jars="/opt/spark/extra-jars/postgresql-42.7.3.jar",
         env_vars=SPARK_ENV,
         verbose=False,
         doc_md=(

@@ -1,10 +1,7 @@
--- =============================================================================
--- Dark Factory Data Platform — Postgres schema initialisation
--- =============================================================================
--- Runs once on first container start. Establishes the two-schema design from
--- docs/01-conception.md §3. Column definitions are derived from the two Kaggle
--- reference datasets: Smart Logistics Supply Chain and HRSS Sensor Data.
--- =============================================================================
+-- Postgres schema initialisation. Runs once on first container start.
+--   raw       — append-only event tables written by the ingestion consumer
+--   analytics — aggregated feature tables written by the Spark job
+-- Columns are derived from the Smart Logistics and HRSS Kaggle datasets.
 
 -- ---------------------------------------------------------------------------
 -- Schemas
