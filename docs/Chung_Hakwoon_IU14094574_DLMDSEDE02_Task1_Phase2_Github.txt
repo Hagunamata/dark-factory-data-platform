@@ -1,0 +1,7 @@
+GitHub repository for Phase 2 - Data Engineering (DLMDSEDE02)
+
+Author: Hakwoon Chung (IU14094574)
+
+Repository URL: https://github.com/Hagunamata/dark-factory-data-platform
+
+The repository contains the Docker Compose stack, Airflow DAGs, Spark job, data generator, and Postgres schema initialization implementing the batch data architecture described in the Phase 1 conception document.

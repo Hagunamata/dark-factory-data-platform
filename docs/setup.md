@@ -1,19 +1,12 @@
 # Setup Guide
 
-Bringing the stack up on a fresh machine.
+Everything runs in Docker, so the only host requirements are Docker (with the Compose plugin) and Git. Developed and tested on Ubuntu 24.04.
 
-Everything runs in Docker containers, so you don't install Postgres, Kafka, Spark, Airflow, or the ELK stack on the host. You install Docker (with Compose v2), Git, and — optionally — GNU Make. On top of that, the Postgres JDBC driver JAR needs to be downloaded once by hand; see step 5 below.
+Give Docker enough memory — the stack runs Elasticsearch, Spark, Airflow, Kafka and Postgres together, so budget around 8 GB of RAM. The first `docker compose up` also pulls several GB of images.
 
-## 1. Resource requirements
+## 1. Install Docker
 
-- 8 GB RAM allocated to Docker (Elasticsearch reserves 1 GB heap alone; the default 2 GB will OOM)
-- 4 CPU cores
-- 20 GB free disk space
-- Internet for the initial image pull (~8 GB)
-
-## 2. Install Docker
-
-**Ubuntu 24.04:** use Docker's official apt repository (not `docker.io`, which is outdated).
+Use Docker's official apt repository (Ubuntu's own `docker.io` package lags behind):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y ca-certificates curl
@@ -31,17 +24,9 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-Verify: `docker run --rm hello-world`.
+Check it works: `docker run --rm hello-world`.
 
-**Windows 10/11:** install Docker Desktop (or Rancher Desktop as a lightweight alternative).
-
-```powershell
-winget install -e --id Docker.DockerDesktop
-```
-
-Reboot, launch Docker Desktop, open Settings → Resources and raise Memory to at least 6 GB. Verify in a fresh PowerShell: `docker --version` and `docker compose version` must both print a version.
-
-## 3. Clone and configure
+## 2. Clone and configure
 
 ```bash
 git clone <this-repo> dark-factory-data-platform
@@ -49,20 +34,11 @@ cd dark-factory-data-platform
 cp .env.example .env
 ```
 
-The `.env` defaults are fine for local development.
+The `.env` defaults are fine for local use.
 
-## 4. Bring the stack up
+## 3. Add the Postgres JDBC driver
 
-```bash
-docker compose up -d
-docker compose ps
-```
-
-First run pulls ~8 GB of images and builds the custom Airflow image; expect 5–15 minutes. Every service should eventually report `Up` or `Up (healthy)`; `airflow-init` reports `Exited (0)` once it has finished the one-shot `db migrate` step.
-
-## 5. Add the Postgres JDBC driver
-
-The Spark quarterly aggregation job reads Postgres via JDBC. The driver JAR is bind-mounted from the host into the Airflow container; download it once:
+The Spark job reads Postgres over JDBC, and the driver JAR is mounted into the Airflow container from `airflow/jars/`. Download it once:
 
 ```bash
 mkdir -p airflow/jars
@@ -70,31 +46,22 @@ curl -fsSL -o airflow/jars/postgresql-42.7.3.jar \
     https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
 ```
 
-Windows PowerShell equivalent:
-
-```powershell
-New-Item -ItemType Directory -Path airflow\jars -Force
-Invoke-WebRequest -Uri "https://jdbc.postgresql.org/download/postgresql-42.7.3.jar" `
-    -OutFile "airflow\jars\postgresql-42.7.3.jar"
-```
-
-Confirm inside the container:
+## 4. Start the stack
 
 ```bash
-docker compose exec airflow-scheduler ls -la /opt/spark/extra-jars/
+docker compose up -d
+docker compose ps
 ```
 
-`postgresql-42.7.3.jar` must be listed.
+First run takes a while (image pulls + the custom Airflow image build). When it settles, every service shows `Up` / `Up (healthy)`, except `airflow-init`, which runs once and exits with `Exited (0)`.
 
-## 6. Seed the data and trigger the DAG
+## 5. Seed the data and run the pipeline
 
 ```bash
 docker compose exec data-generator python -m data_generator.bootstrap
 ```
 
-Then open Airflow at `http://localhost:8080` (login `airflow` / `airflow`), unpause `dark_factory_pipeline`, and trigger it. All three tasks should finish green within a few minutes.
-
-Full verification steps and expected outputs are in `docs/verification.md`.
+Then open Airflow at http://localhost:8080 (login `airflow` / `airflow`), unpause `dark_factory_pipeline`, and trigger it. The full verification steps are in `docs/verification.md`.
 
 ## Service URLs
 
@@ -105,13 +72,3 @@ Full verification steps and expected outputs are in `docs/verification.md`.
 | Kibana | http://localhost:5601 | — |
 | Elasticsearch | http://localhost:9200 | — |
 | Postgres | `localhost:5432` | see `.env` |
-
-## Common problems
-
-**Elasticsearch exits with code 137.** Out-of-memory. Give Docker more RAM (Settings → Resources on Windows, host RAM on Linux), or lower `ES_JAVA_OPTS` in `docker-compose.yml` from `-Xms1g -Xmx1g` to `-Xms512m -Xmx512m`.
-
-**Kafka container restarts with "Cluster ID mismatch".** On-disk KRaft metadata from a previous run doesn't match the new container. Wipe the volume: `docker compose down && docker volume rm dark-factory-data-platform_kafka_data && docker compose up -d`.
-
-**Spark job fails with `ClassNotFoundException: org.postgresql.Driver`.** The JDBC JAR isn't visible inside the Airflow container. Confirm the file exists on the host at `airflow/jars/postgresql-42.7.3.jar` and that the containers were recreated after adding the mount: `docker compose up -d --force-recreate airflow-webserver airflow-scheduler airflow-init`.
-
-**`make` isn't available on Windows.** The `Makefile` is a thin convenience wrapper. If `make` isn't installed, run the underlying `docker compose` commands directly — every Makefile target is one line of `docker compose ...`.
